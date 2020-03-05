@@ -29,11 +29,7 @@ public class MainCanvas extends JPanel {
 
         backgroundTime += deltaTime;
         if (backgroundTime >= 5){
-            setBackground(Color.getHSBColor(
-                    (int) (Math.random() * 255),
-                    (int) (Math.random() * 255),
-                    (int) (Math.random() * 255))
-            );
+            BackgroundCanvas.swapBackground(MainCanvas.this);
             backgroundTime = 0;
         }
 

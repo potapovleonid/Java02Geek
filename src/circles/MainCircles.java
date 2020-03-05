@@ -28,7 +28,6 @@ public class MainCircles extends JFrame {
         setTitle("Circles");
         initApplication();
         addAndDeleteBalls();
-
         MainCanvas canvas = new MainCanvas(this);
         add(canvas);
         setVisible(true);
