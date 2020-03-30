@@ -6,7 +6,7 @@ import java.awt.event.*;
 import java.io.FileWriter;
 import java.io.IOException;
 
-public class ClientGUI extends JFrame implements ActionListener, Thread.UncaughtExceptionHandler, KeyListener {
+public class ClientGUI extends JFrame implements ActionListener, Thread.UncaughtExceptionHandler {
 
     private static final int WIDTH = 400;
     private static final int HEIGHT = 300;
@@ -19,7 +19,6 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
     private final JTextField tfLogin = new JTextField("leonid");
     private final JPasswordField tfPassword = new JPasswordField("228");
     private final JButton btnLogin = new JButton("Login");
-
     private final JPanel panelBottom = new JPanel(new BorderLayout());
     private final JButton btnDisconnect = new JButton("<html><b>Disconnect</b></html>");
     private final JTextField tfMessage = new JTextField();
@@ -52,7 +51,7 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
 
         cbAlwaysOnTop.addActionListener(this);
         btnSend.addActionListener(this);
-        tfMessage.addKeyListener(this);
+        tfMessage.addActionListener(this);
 
         panelTop.add(tfIPAddress);
         panelTop.add(tfPort);
@@ -70,26 +69,25 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
         add(panelBottom, BorderLayout.SOUTH);
 
 
-
         setVisible(true);
     }
 
-    private void writeLog(String message){
-        try(FileWriter fwr = new FileWriter("logs.txt", true)) {
+    private void writeLog(String message) {
+        try (FileWriter fwr = new FileWriter("logs.txt", true)) {
             fwr.write(message + "\n");
+            fwr.flush();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public void printMessageForLog(){
-        if (tfMessage.getText().equals("")) {
-        } else {
-            String message = tfMessage.getText() + "   " + tfLogin.getText();
-            log.append(message + "\n");
-            writeLog(message);
-            tfMessage.setText("");
-        }
+    private void printMessageForLog() {
+        String message = tfLogin.getText() + ": " + tfMessage.getText();
+        log.append(message + "\n");
+        tfMessage.grabFocus();
+        log.setCaretPosition(log.getDocument().getLength());
+        writeLog(message);
+        tfMessage.setText("");
     }
 
     @Override
@@ -97,13 +95,12 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
         Object src = e.getSource();
         if (src == cbAlwaysOnTop) {
             setAlwaysOnTop(cbAlwaysOnTop.isSelected());
-        } else if (src == btnSend){
+        } else if (src == tfMessage || src == btnSend) {
+            if (tfMessage.getText().equals("")) return;
             printMessageForLog();
-        }
-        else
+        } else
             throw new RuntimeException("Unknown source: " + src);
     }
-
 
 
     @Override
@@ -118,25 +115,4 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
         System.exit(1);
     }
 
-
-    @Override
-    public void keyTyped(KeyEvent e) {
-
-    }
-
-    @Override
-    public void keyPressed(KeyEvent e) {
-
-    }
-
-    @Override
-    public void keyReleased(KeyEvent e) {
-        int src = e.getKeyCode();
-        if (src == KeyEvent.VK_ENTER){
-            if (tfMessage.getText().equals("")) {
-            } else {
-                printMessageForLog();
-            }
-        }
-    }
 }

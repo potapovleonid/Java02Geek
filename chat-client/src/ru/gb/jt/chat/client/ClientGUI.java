@@ -1,6 +1,6 @@
 package ru.gb.jt.chat.client;
 
-import jdk.net.Sockets;
+import ru.gb.jt.chat.library.Library;
 import ru.gb.jt.network.SocketThread;
 import ru.gb.jt.network.SocketThreadListener;
 
@@ -11,6 +11,9 @@ import java.awt.event.ActionListener;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.Socket;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
 
 public class ClientGUI extends JFrame implements ActionListener, Thread.UncaughtExceptionHandler, SocketThreadListener {
 
@@ -22,8 +25,8 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
     private final JTextField tfIPAddress = new JTextField("127.0.0.1");
     private final JTextField tfPort = new JTextField("8189");
     private final JCheckBox cbAlwaysOnTop = new JCheckBox("Always on top");
-    private final JTextField tfLogin = new JTextField("ivan");
-    private final JPasswordField tfPassword = new JPasswordField("123");
+    private final JTextField tfLogin = new JTextField("");
+    private final JPasswordField tfPassword = new JPasswordField("");
     private final JButton btnLogin = new JButton("Login");
 
     private final JPanel panelBottom = new JPanel(new BorderLayout());
@@ -31,8 +34,14 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
     private final JTextField tfMessage = new JTextField();
     private final JButton btnSend = new JButton("Send");
 
+    private final DateFormat DATE_FORMAT = new SimpleDateFormat("HH:mm:ss: ");
+    private final String WINDOW_TITLE = "Chat";
+
+
     private final JList<String> userList = new JList<>();
     private SocketThread socketThread;
+    private String nickname;
+
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(new Runnable() {
@@ -71,13 +80,13 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
         panelBottom.add(btnDisconnect, BorderLayout.WEST);
         panelBottom.add(tfMessage, BorderLayout.CENTER);
         panelBottom.add(btnSend, BorderLayout.EAST);
+        panelBottom.setVisible(false);
 
         add(scrollLog, BorderLayout.CENTER);
         add(scrollUsers, BorderLayout.EAST);
         add(panelTop, BorderLayout.NORTH);
         add(panelBottom, BorderLayout.SOUTH);
 
-        panelBottom.setVisible(false);
         setVisible(true);
     }
 
@@ -91,9 +100,8 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
         } else if (src == btnLogin) {
             connect();
         } else if (src == btnDisconnect) {
-            disconnect();
-        }
-        else
+            socketThread.close();
+        } else
             throw new RuntimeException("Unknown source: " + src);
     }
 
@@ -101,32 +109,29 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
         try {
             Socket socket = new Socket(tfIPAddress.getText(), Integer.parseInt(tfPort.getText()));
             socketThread = new SocketThread(this, "Client", socket);
-            panelTop.setVisible(false);
-            panelBottom.setVisible(true);
         } catch (IOException e) {
             showException(Thread.currentThread(), e);
         }
     }
 
-    private void disconnect() {
-        try {
-            socketThread.close();
-            panelBottom.setVisible(false);
-            panelTop.setVisible(true);
-        } catch (Exception e) {
-            showException(Thread.currentThread(), e);
-        }
-    }
-
     private void sendMessage() {
-        String msg = tfMessage.getText();
-        String username = tfLogin.getText();
+
+        String[] msg = tfMessage.getText().split("_");
+        String type = msg[0];
+        String message = msg[1];
         if ("".equals(msg)) return;
         tfMessage.setText(null);
         tfMessage.grabFocus();
-        socketThread.sendMessage(msg);
-//        putLog(String.format("%s: %s", username, msg));
-//        wrtMsgToLogFile(msg, username);
+
+        switch (type) {
+
+            case Library.TYPE_BROADCAST:
+                socketThread.sendMessage(Library.getTypeBcastClient(message));
+                break;
+            default:
+                socketThread.sendMessage(Library.getTypeUserMsg(type, nickname,  message));
+                break;
+        }
     }
 
     private void wrtMsgToLogFile(String msg, String username) {
@@ -171,7 +176,7 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
 
     /**
      * Socket thread methods
-     * */
+     */
 
     @Override
     public void onSocketStart(SocketThread thread, Socket socket) {
@@ -181,20 +186,62 @@ public class ClientGUI extends JFrame implements ActionListener, Thread.Uncaught
     @Override
     public void onSocketStop(SocketThread thread) {
         putLog("Stop");
+        panelBottom.setVisible(false);
+        panelTop.setVisible(true);
+        setTitle(WINDOW_TITLE);
+        userList.setListData(new String[0]);
     }
 
     @Override
     public void onSocketReady(SocketThread thread, Socket socket) {
         putLog("Ready");
+        panelBottom.setVisible(true);
+        panelTop.setVisible(false);
+        String login = tfLogin.getText();
+        String password = new String(tfPassword.getPassword());
+        int p = password.hashCode();
+        thread.sendMessage(Library.getAuthRequest(login, password));
+
     }
 
     @Override
     public void onReceiveString(SocketThread thread, Socket socket, String msg) {
-        putLog(msg);
+        String[] arr = msg.split(Library.DELIMITER);
+        String msgType = arr[0];
+        switch (msgType) {
+            case Library.AUTH_ACCEPT:
+                setTitle(WINDOW_TITLE + " entered with nickname: " + arr[1]);
+                nickname = arr[1];
+                break;
+            case Library.AUTH_DENIED:
+                putLog(msg);
+                break;
+            case Library.MSG_FORMAT_ERROR:
+                putLog(msg);
+                socketThread.close();
+                break;
+            case Library.TYPE_BROADCAST:
+                putLog(DATE_FORMAT.format(Long.parseLong(arr[1])) +
+                        arr[2] + ": " + arr[3]);
+                break;
+            case Library.USER_LIST:
+                String users = msg.substring(Library.USER_LIST.length() +
+                        Library.DELIMITER.length());
+                String[] usersArr = users.split(Library.DELIMITER);
+                Arrays.sort(usersArr);
+                userList.setListData(usersArr);
+                break;
+            case Library.USER_MSG:
+                putLog(nickname + ": " + arr[2]);
+                break;
+            default:
+                throw new RuntimeException("Unknown message type: " + msg);
+        }
+
     }
 
     @Override
     public void onSocketException(SocketThread thread, Exception exception) {
-        showException(thread, exception);
+        //showException(thread, exception);
     }
 }
