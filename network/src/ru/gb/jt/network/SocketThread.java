@@ -30,8 +30,7 @@ public class SocketThread extends Thread {
                 listener.onReceiveString(this, socket, msg);
             }
         } catch (IOException e) {
-//            listener.onSocketException(this, e);
-            System.out.println("client socket deleted or lost connection");
+            listener.onSocketException(this, e);
         } finally {
             close();
             listener.onSocketStop(this);
